@@ -43,8 +43,11 @@ def run_agent(
 
     for step in range(1, max_steps + 1):
         try:
-            # TODO 2.1: Ask llm for one decision validated by DecisionAdapter.
-            raise NotImplementedError
+            decision = llm.generate(
+                messages=messages,
+                response_model=DecisionAdapter,
+            )
+            decision = DecisionAdapter.validate_python(decision)
         except (ValidationError, ValueError, TypeError, RuntimeError) as exc:
             return _failed(
                 f"The model did not produce a valid decision: {exc}",
@@ -53,8 +56,14 @@ def run_agent(
             )
 
         if isinstance(decision, ClarificationDecision):
-            # TODO 2.2: Return clarification_required without calling a tool.
-            raise NotImplementedError
+            return AgentRun(
+                response=AgentResponse(
+                    status="clarification_required",
+                    message=decision.question,
+                ),
+                trace=trace,
+                termination_reason="clarification_required",
+            )
 
         if isinstance(decision, FinalDecision):
             # TODO 2.3: Validate the final response. Return a failed run if it is
