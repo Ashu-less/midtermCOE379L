@@ -105,5 +105,7 @@ def validate_final_response(
     for action in successful_actions:
         if action not in response.completed_actions:
             errors.append("successful_mutation_not_reported")
+    if response.status != "completed" and response.completed_actions:
+        errors.append("non_completed_response_claims_actions")
 
     return errors
