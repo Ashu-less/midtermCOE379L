@@ -1,9 +1,5 @@
 """Milestone 2: complete the bounded decision–action–observation loop."""
 
-# Ruff suppressions cover names intentionally reserved for the TODOs. Remove
-# this line after completing Milestone 2.
-# ruff: noqa: F401, F821, F841
-
 from __future__ import annotations
 
 import json
@@ -66,26 +62,67 @@ def run_agent(
             )
 
         if isinstance(decision, FinalDecision):
-            # TODO 2.3: Validate the final response. Return a failed run if it is
-            # inconsistent; otherwise return the model's final response.
-            raise NotImplementedError
+            errors = validate_final_response(decision.response, trace)
+            if errors:
+                return _failed(
+                    "Invalid final response: " + "; ".join(errors),
+                    trace,
+                    "invalid_final_response",
+                )
+            return AgentRun(
+                response=decision.response,
+                trace=trace,
+                termination_reason="model_finished",
+            )
 
         if not isinstance(decision, ToolCallDecision):
             return _failed(
                 "Unsupported decision type.", trace, "invalid_model_decision"
             )
 
-        # TODO 2.4: Call validate_proposed_tool_call. If it returns errors,
-        # create an action_gate_denied observation. Otherwise dispatch the tool.
-        raise NotImplementedError
+        errors = validate_proposed_tool_call(
+            decision,
+            request=request,
+            trace=trace,
+        )
 
-        # TODO 2.5: Create and append a TraceEvent. Set mutating by consulting
-        # MUTATING_TOOLS rather than hard-coding one tool name.
-        raise NotImplementedError
+        if errors:
+            observation = ToolObservation(
+                ok=False,
+                tool=decision.tool,
+                error_code="action_gate_denied",
+                message="; ".join(errors),
+            )
+        else:
+            observation = environment.dispatch(
+                decision.tool,
+                decision.arguments,
+            )
 
-        # TODO 2.6: Append the serialized decision as an assistant message and
-        # the serialized observation as a tool message.
-        raise NotImplementedError
+        trace.append(
+            TraceEvent(
+                step=step,
+                decision=decision.model_dump(),
+                observation=observation,
+                mutating=decision.tool in MUTATING_TOOLS,
+            )
+        )
 
-    # TODO 2.7: Return an explicit maximum_steps_exceeded failure.
-    raise NotImplementedError
+        messages.append(
+            {
+                "role": "assistant",
+                "content": json.dumps(decision.model_dump(mode="json")),
+            }
+        )
+        messages.append(
+            {
+                "role": "tool",
+                "content": json.dumps(observation.model_dump(mode="json")),
+            }
+        )
+
+    return _failed(
+        "The agent reached the maximum number of steps without completing.",
+        trace,
+        "maximum_steps_exceeded",
+    )
